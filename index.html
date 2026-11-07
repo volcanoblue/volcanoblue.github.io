@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Volcano Blue — Event Sourcing for .NET</title>
+<meta property="og:type" content="website">
+<meta property="og:title" content="Volcano Blue — Event Sourcing for .NET">
+<meta property="og:url" content="https://volcano.blue/">
+<meta property="og:image" content="https://volcano.blue/social-thumb.png?v=f0b3b7d1">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Volcano Blue — Event Sourcing for .NET">
+<meta name="twitter:image" content="https://volcano.blue/social-thumb.png?v=f0b3b7d1">
 <style>
 :root{color-scheme:light;--bg:#f7f9fc;--surface:#fff;--text:#0f1b33;--muted:#53607a;--line:#dde4f0;--m:#16358f;--l1:#2f6bff;--l2:#7db0ff;--code:#eef2fa;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--bg:#0a1122;--surface:#111a30;--text:#e8eefc;--muted:#9aa8c7;--line:#223055;--m:#2c52c9;--l1:#4f8cff;--l2:#a8cbff;--code:#0d1630}}
@@ -66,7 +73,7 @@ footer a{color:var(--l1)}
   <h1>Event Sourcing for .NET,<br><span>without the friction</span></h1>
   <p>Volcano Blue is a NuGet library that abstracts how events are implemented and the EventStore layer that sits on top of your database.</p>
   <a class="btn" href="#docs">Read the docs</a>
-  <a class="btn o" href="https://github.com/volcano-blue/event-sourcing">View source on GitHub</a>
+  <a class="btn o" href="https://github.com/volcanoblue/event-sourcing">View source on GitHub</a>
 </header>
 
 <section id="features">
@@ -283,7 +290,7 @@ await snapshotStore.SaveChangesAsync();</code></pre>
 snapshotStore.GetService&lt;IRelationalDatabaseCreator&gt;().CreateTables(); // when sharing one database</code></pre>
 </section>
 </div>
-<footer><div class="w">Volcano Blue · Event Sourcing for .NET · <a href="https://github.com/volcano-blue/event-sourcing">GitHub</a></div></footer>
+<footer><div class="w">Volcano Blue · Event Sourcing for .NET · <a href="https://github.com/volcanoblue/event-sourcing">GitHub</a></div></footer>
 <script>
 (function(){
   var docs=document.getElementById('docs'),links=document.querySelectorAll('nav a[href^="#"]');
