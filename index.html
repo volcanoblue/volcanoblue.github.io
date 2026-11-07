@@ -35,6 +35,9 @@ nav a{color:var(--muted);text-decoration:none;margin-left:18px;font-size:15px}
 section{padding:40px 0}
 h2{font-size:28px;margin:0 0 8px;letter-spacing:-.01em}
 h3{font-size:20px;margin:32px 0 6px}
+.docs h3{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.docs h3 .top{font-size:13px;font-weight:400;color:var(--muted);text-decoration:none;white-space:nowrap}
+.docs h3 .top:hover{color:var(--l1)}
 .sub{color:var(--muted);margin:0 0 24px}
 .g{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
 .c{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px}
@@ -100,6 +103,7 @@ footer a{color:var(--l1)}
 </div>
 
 <section id="docs" class="docs">
+  <a id="toc"></a>
   <h2>Documentation</h2>
   <p class="sub">How to use Volcano Blue in your application. Targets .NET 10 and Entity Framework Core.</p>
   <div class="toc"><a href="#install">Installation</a><a href="#concepts">Core concepts</a><a href="#versioning">Versioning</a><a href="#quickstart">Quick start</a><a href="#api">EventStore API</a><a href="#snapshots">Snapshots</a><a href="#legacy">Legacy database</a><a href="#serialization">Serialization</a><a href="#setup">Database setup</a></div>
@@ -108,7 +112,7 @@ footer a{color:var(--l1)}
   <p>Add the package to your project, plus an EF Core provider for your database (SQL Server, SQLite, PostgreSQL, ...).</p>
   <pre><code>dotnet add package VolcanoBlue.EventSourcing</code></pre>
 
-  <h3 id="concepts">Core concepts</h3>
+  <h3 id="concepts">Core concepts<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
   <p>An <b>event</b> is an immutable fact that already happened, named in the past tense. A <b>stream</b> is the ordered list of events of one entity. The current state is never stored directly: it is rebuilt by replaying the events in order.</p>
   <table>
     <tr><th>Type</th><th>Purpose</th></tr>
@@ -121,7 +125,7 @@ footer a{color:var(--l1)}
     <tr><td><code>AddEventSourcing()</code></td><td><code>IServiceCollection</code> extension that configures the library (event type registration).</td></tr>
   </table>
 
-  <h3 id="versioning">Versioning</h3>
+  <h3 id="versioning">Versioning<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
   <ul>
     <li>A new entity starts at <code>Version = 1</code>.</li>
     <li><code>RaiseEvent(event)</code> increments <code>Version</code>, records the event as uncommitted and applies it through <code>ProcessEvent</code>.</li>
@@ -130,7 +134,7 @@ footer a{color:var(--l1)}
     <li><code>CommitEvents()</code> clears the uncommitted list after a successful save.</li>
   </ul>
 
-  <h3 id="quickstart">Quick start</h3>
+  <h3 id="quickstart">Quick start<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
   <p><b>1. Define events.</b></p>
 <pre><code>using VolcanoBlue.EventSourcing.Abstractions;
 
@@ -191,7 +195,7 @@ customer.CommitEvents();
 var stream = await eventStore.ReadStreamAsync("Customer-42");
 var loaded = Customer.Rehydrate("42", stream);</code></pre>
 
-  <h3 id="api">EventStore API</h3>
+  <h3 id="api">EventStore API<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
   <p><code>EventDbContext</code> methods:</p>
   <table>
     <tr><th>Method</th><th>Description</th></tr>
@@ -206,7 +210,7 @@ var loaded = Customer.Rehydrate("42", stream);</code></pre>
     <li>Reads use <code>AsNoTracking</code> and return immutable arrays.</li>
   </ul>
 
-  <h3 id="snapshots">Snapshots</h3>
+  <h3 id="snapshots">Snapshots<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
   <p>Snapshots avoid replaying long streams. A snapshot is any type implementing <code>ISnapshot</code>, where <code>EntityVersion</code> is the last event applied.</p>
 <pre><code>public sealed record CustomerSnapshot(int EntityVersion, string? Name) : ISnapshot;</code></pre>
   <table>
@@ -241,7 +245,7 @@ if (customer.ShouldTakeSnapshot())
     await snapshots.SaveChangesAsync();
 }</code></pre>
 
-  <h3 id="legacy">Mapping a legacy database</h3>
+  <h3 id="legacy">Mapping a legacy database<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
   <p>If the tables already exist with their own names (database-first), keep the schema as is and map the public <code>Event</code> and <code>Snapshot</code> entities onto it. Each context accepts an optional callback resolved from DI: <code>EventModelConfiguration</code> for <code>EventDbContext</code> and <code>SnapshotModelConfiguration</code> for <code>SnapshotDbContext</code>. The callback runs after the default configuration, so your mapping wins.</p>
   <p><b>1. The existing tables.</b> All columns are required, and the primary keys must be <code>(Id, StreamId)</code> and <code>(EntityId, EntityVersion)</code>.</p>
 <pre><code>CREATE TABLE event_log (
@@ -302,7 +306,7 @@ await snapshotStore.UpsertAsync("Customer-42", new CustomerSnapshot(2, "Ada"));
 await snapshotStore.SaveChangesAsync();</code></pre>
   <div class="note">Do not call <code>EnsureCreated()</code> or run migrations against a legacy database: the schema is owned by the database. EF caches the model per context type, so use a single mapping per application. A working example is in <code>test/DatabaseFirstTests.cs</code>.</div>
 
-  <h3 id="serialization">Serialization</h3>
+  <h3 id="serialization">Serialization<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
   <ul>
     <li>Events and snapshots are serialized with <code>System.Text.Json</code>; fields are included and property names are case-insensitive on read.</li>
     <li>Types with private constructors can be deserialized, keeping domain types free of serialization concerns.</li>
@@ -310,7 +314,7 @@ await snapshotStore.SaveChangesAsync();</code></pre>
     <li>The full type name is stored, so renaming or moving an event type breaks reading existing events.</li>
   </ul>
 
-  <h3 id="setup">Database setup</h3>
+  <h3 id="setup">Database setup<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
   <p>The library ships no migrations; create the schema yourself. For tests, an in-memory SQLite database works well (see <code>test/SqliteFixture.cs</code>).</p>
 <pre><code>eventStore.Database.EnsureCreated();
 snapshotStore.GetService&lt;IRelationalDatabaseCreator&gt;().CreateTables(); // when sharing one database</code></pre>
