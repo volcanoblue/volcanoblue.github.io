@@ -76,6 +76,7 @@ footer a{color:var(--l1)}
   <h1>Event Sourcing for .NET,<br><span>without the friction</span></h1>
   <p>Volcano Blue is a NuGet library that abstracts how events are implemented and the EventStore layer that sits on top of your database.</p>
   <a class="btn" href="#docs">Read the docs</a>
+  <a class="btn o" href="https://www.nuget.org/packages/VolcanoBlue.EventSourcing/">Get it on NuGet</a>
   <a class="btn o" href="https://github.com/volcanoblue/event-sourcing">View source on GitHub</a>
 </header>
 
@@ -116,7 +117,7 @@ footer a{color:var(--l1)}
     <tr><td><code>ISnapshotable&lt;T&gt;</code></td><td>Optional: lets an entity decide when and how to create a snapshot.</td></tr>
     <tr><td><code>EventDbContext</code></td><td>Append-only event store (read streams, append, save).</td></tr>
     <tr><td><code>SnapshotDbContext</code></td><td>Snapshot store (get by id, upsert).</td></tr>
-    <tr><td><code>EventTypeRegistry</code></td><td>Maps stored type names to CLR event types when reading.</td></tr>
+    <tr><td><code>AddEventSourcing()</code></td><td><code>IServiceCollection</code> extension that configures the library (event type registration).</td></tr>
   </table>
 
   <h3 id="versioning">Versioning</h3>
@@ -169,8 +170,10 @@ public sealed record NameChanged(long EventId, string Name) : IEvent;</code></pr
         }
     }
 }</code></pre>
-  <p><b>3. Register event types and the stores.</b> Call <code>EventTypeRegistry.Initialize</code> once at startup with every assembly that contains events.</p>
-<pre><code>EventTypeRegistry.Initialize(typeof(NameChanged).Assembly);
+  <p><b>3. Configure the library and register the stores.</b> Call the <code>AddEventSourcing</code> extension method once at startup.</p>
+<pre><code>using VolcanoBlue.EventSourcing.Extensions;
+
+services.AddEventSourcing();
 
 services.AddDbContext&lt;EventDbContext&gt;(o =&gt; o.UseSqlite("Data Source=events.db"));
 services.AddDbContext&lt;SnapshotDbContext&gt;(o =&gt; o.UseSqlite("Data Source=events.db"));</code></pre>
@@ -216,7 +219,26 @@ var state = snapshot ? snapshot.Get() : new CustomerSnapshot(0, null);
 
 var tail = await events.ReadStreamFromEventIdAsync("Customer-42", state.EntityVersion);
 // apply tail on top of state</code></pre>
-  <p>Implement <code>ISnapshotable&lt;TSnapshot&gt;</code> (<code>ShouldTakeSnapshot()</code> / <code>TakeSnapshot()</code>) on an entity to encapsulate when and how snapshots are taken.</p>
+  <p>Implement <code>ISnapshotable&lt;TSnapshot&gt;</code> (<code>ShouldTakeSnapshot()</code> / <code>TakeSnapshot()</code>) on an entity to encapsulate when and how snapshots are taken. The interface lives in <code>VolcanoBlue.EventSourcing.Abstractions</code>.</p>
+<pre><code>using VolcanoBlue.EventSourcing.Abstractions;
+
+public sealed class Customer : Entity, ISnapshotable&lt;CustomerSnapshot&gt;
+{
+    private const int SnapshotInterval = 50;
+
+    // ... StreamId, Name, Rename, ProcessEvent as in the quick start ...
+
+    // Take a snapshot every 50 events.
+    public bool ShouldTakeSnapshot() =&gt; Version &gt; 0 &amp;&amp; Version % SnapshotInterval == 0;
+
+    public CustomerSnapshot TakeSnapshot() =&gt; new(Version, Name);
+}
+
+if (customer.ShouldTakeSnapshot())
+{
+    await snapshots.UpsertAsync(customer.StreamId, customer.TakeSnapshot());
+    await snapshots.SaveChangesAsync();
+}</code></pre>
 
   <h3 id="legacy">Mapping a legacy database</h3>
   <p>If the tables already exist with their own names (database-first), keep the schema as is and map the public <code>Event</code> and <code>Snapshot</code> entities onto it. Each context accepts an optional callback resolved from DI: <code>EventModelConfiguration</code> for <code>EventDbContext</code> and <code>SnapshotModelConfiguration</code> for <code>SnapshotDbContext</code>. The callback runs after the default configuration, so your mapping wins.</p>
@@ -239,9 +261,9 @@ var tail = await events.ReadStreamFromEventIdAsync("Customer-42", state.EntityVe
   <p><b>2. Map the columns when registering the contexts.</b></p>
 <pre><code>using Microsoft.EntityFrameworkCore;
 using VolcanoBlue.EventSourcing.EventStore;
-using VolcanoBlue.EventSourcing.EventStore.Serialization;
+using VolcanoBlue.EventSourcing.Extensions;
 
-EventTypeRegistry.Initialize(typeof(NameChanged).Assembly);
+services.AddEventSourcing();
 
 // The mapping callbacks are picked up by the contexts' constructors.
 services.AddSingleton&lt;EventModelConfiguration&gt;(modelBuilder =&gt;
@@ -283,7 +305,7 @@ await snapshotStore.SaveChangesAsync();</code></pre>
   <ul>
     <li>Events and snapshots are serialized with <code>System.Text.Json</code>; fields are included and property names are case-insensitive on read.</li>
     <li>Types with private constructors can be deserialized, keeping domain types free of serialization concerns.</li>
-    <li>Event types must be concrete classes or records implementing <code>IEvent</code>, and their assembly must be passed to <code>EventTypeRegistry.Initialize</code>; otherwise reading throws <code>InvalidOperationException</code>.</li>
+    <li>Event types must be concrete classes or records implementing <code>IEvent</code>, and the library must be configured with <code>services.AddEventSourcing()</code>; otherwise reading throws <code>InvalidOperationException</code>.</li>
     <li>The full type name is stored, so renaming or moving an event type breaks reading existing events.</li>
   </ul>
 
@@ -293,7 +315,7 @@ await snapshotStore.SaveChangesAsync();</code></pre>
 snapshotStore.GetService&lt;IRelationalDatabaseCreator&gt;().CreateTables(); // when sharing one database</code></pre>
 </section>
 </div>
-<footer><div class="w">Volcano Blue · Event Sourcing for .NET · <a href="https://github.com/volcanoblue/event-sourcing">GitHub</a></div></footer>
+<footer><div class="w">Volcano Blue · Event Sourcing for .NET · <a href="https://www.nuget.org/packages/VolcanoBlue.EventSourcing/">NuGet</a> · <a href="https://github.com/volcanoblue/event-sourcing">GitHub</a></div></footer>
 <script>
 (function(){
   var docs=document.getElementById('docs'),links=document.querySelectorAll('nav a[href^="#"]');
