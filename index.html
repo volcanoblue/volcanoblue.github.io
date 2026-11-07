@@ -94,7 +94,7 @@ footer a{color:var(--l1)}
 
   <h3 id="install">Installation</h3>
   <p>Add the package to your project, plus an EF Core provider for your database (SQL Server, SQLite, PostgreSQL, ...).</p>
-  <pre><code>dotnet add package VolcanoBlue.EventSourcing --prerelease</code></pre>
+  <pre><code>dotnet add package VolcanoBlue.EventSourcing</code></pre>
 
   <h3 id="concepts">Core concepts</h3>
   <p>An <b>event</b> is an immutable fact that already happened, named in the past tense. A <b>stream</b> is the ordered list of events of one entity. The current state is never stored directly: it is rebuilt by replaying the events in order.</p>
