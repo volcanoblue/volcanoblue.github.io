@@ -23,6 +23,7 @@ body{margin:0;background:var(--bg);color:var(--text);font:16px/1.65 system-ui,-a
 .w{max-width:960px;margin:0 auto;padding:0 20px}
 nav{display:flex;justify-content:space-between;align-items:center;padding:18px 0;flex-wrap:wrap;gap:8px}
 nav b{display:flex;align-items:center;gap:10px;font-size:18px}
+nav a.brand{display:flex;align-items:center;gap:10px;margin-left:0;color:inherit;font-size:inherit}
 nav a{color:var(--muted);text-decoration:none;margin-left:18px;font-size:15px}
 .hero{padding:52px 0 40px;text-align:center}
 .hero svg{width:96px;height:96px;margin-bottom:12px}
@@ -64,9 +65,9 @@ footer a{color:var(--l1)}
 <path style="fill:var(--l1)" d="M14 43L23 27Q25 23 29 23H35Q39 23 41 27L50 43Q48 47 45 46Q43 53 40 47Q37 45 34 49Q31 53 28 47Q25 45 22 51Q19 54 18 46Q16 47 14 43Z"/>
 <circle style="fill:var(--l2)" cx="28" cy="15" r="5"/><circle style="fill:var(--l2)" cx="39" cy="9" r="3.8"/><circle style="fill:var(--l2)" cx="36" cy="18.5" r="2.8"/>
 </symbol></svg>
-<div class="w">
+<div class="w" id="home">
 <nav>
-  <b><svg width="32" height="32"><use href="#vb"/></svg>Volcano Blue</b>
+  <b><a class="brand" href="#home"><svg width="32" height="32"><use href="#vb"/></svg>Volcano Blue</a></b>
   <div><a href="#features">Features</a><a href="#how">How it works</a><a href="#docs">Docs</a></div>
 </nav>
 
