@@ -123,8 +123,7 @@ footer a{color:var(--l1)}
     <tr><td><code>EventStore</code></td><td><code>EventStore</code></td><td><b>The main entry point.</b> <code>LoadAsync</code>, <code>LoadFromSnapshotAsync</code> and <code>SaveAsync</code> for your aggregates.</td></tr>
     <tr><td><code>EventSourcedEntity</code></td><td><code>Abstractions</code></td><td>Base class for aggregates: tracks <code>Version</code>, uncommitted events, and applies events.</td></tr>
     <tr><td><code>IEvent</code></td><td><code>Abstractions</code></td><td>Contract for domain events. <code>EventId</code> is the sequence number in the stream and the entity version.</td></tr>
-    <tr><td><code>ISnapshot</code></td><td><code>Abstractions</code></td><td>Contract for a materialized state at a given <code>EntityVersion</code>.</td></tr>
-    <tr><td><code>ISnapshotable&lt;T&gt;</code></td><td><code>Abstractions</code></td><td>Optional contract for entities that decide when and how to create a snapshot.</td></tr>
+    <tr><td><code>ISnapshot</code></td><td><code>Abstractions</code></td><td>Contract for a materialized state at a given <code>EntityVersion</code>. An entity can implement it to be its own snapshot and decide when one is taken (<code>ShouldTakeSnapshot()</code>).</td></tr>
     <tr><td><code>EventTypesRegistry</code></td><td><code>EventStore.Serialization</code></td><td>Maps stored type names to CLR event types for deserialization.</td></tr>
     <tr><td><code>EventDbContext</code> / <code>SnapshotDbContext</code></td><td><code>EventStore</code></td><td>The EF Core stores behind the store. You rarely need them directly (see <a href="#lowlevel">Low-level stores</a>).</td></tr>
   </table>
@@ -198,7 +197,7 @@ services.AddEventSourcing(typeof(NameChanged).Assembly);</code></pre>
     <tr><th>Method</th><th>Description</th></tr>
     <tr><td><code>LoadAsync&lt;T&gt;(streamId, ct)</code></td><td>Reads the whole stream, creates a <code>T</code> and rehydrates it. Returns <code>Option&lt;T&gt;</code>; <code>None</code> when the stream is empty.</td></tr>
     <tr><td><code>LoadFromSnapshotAsync&lt;T&gt;(streamId, ct)</code></td><td>Loads the latest snapshot and replays only the events after it. Without a snapshot it replays the whole stream. <code>None</code> when neither exists.</td></tr>
-    <tr><td><code>SaveAsync&lt;T&gt;(streamId, entity, ct)</code></td><td>Appends the uncommitted events, saves them in one round trip and calls <code>CommitEvents()</code>. Does nothing when there are no uncommitted events. If the entity implements <code>ISnapshotable&lt;&gt;</code> and <code>ShouldTakeSnapshot()</code> returns true, it then takes a snapshot and persists it (see <a href="#snapshots">Snapshots</a>).</td></tr>
+    <tr><td><code>SaveAsync&lt;T&gt;(streamId, entity, ct)</code></td><td>Appends the uncommitted events, saves them in one round trip and calls <code>CommitEvents()</code>. Does nothing when there are no uncommitted events. If the entity implements <code>ISnapshot</code> and <code>ShouldTakeSnapshot()</code> returns true, it then persists the entity as a snapshot (see <a href="#snapshots">Snapshots</a>).</td></tr>
   </table>
   <ul>
     <li><code>T</code> is created through a cached, compiled factory (no reflection per call), so non-public parameterless constructors are fine. A type without one throws <code>InvalidOperationException</code>.</li>
@@ -208,23 +207,23 @@ services.AddEventSourcing(typeof(NameChanged).Assembly);</code></pre>
 
   <h3 id="snapshots">Snapshots<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
   <p>Snapshots avoid replaying long streams. With <code>LoadFromSnapshotAsync&lt;T&gt;</code>, the entity is its own snapshot: <code>T : EventSourcedEntity, ISnapshot</code>, where <code>EntityVersion</code> is the last event applied.</p>
-<pre><code>public sealed class Customer : EventSourcedEntity, ISnapshot, ISnapshotable&lt;Customer&gt;
+<pre><code>public sealed class Customer : EventSourcedEntity, ISnapshot
 {
-    public int EntityVersion { get; set; }
+    // Last applied event. It is serialized with the snapshot, and its setter restores Version on load.
+    public int EntityVersion
+    {
+        get =&gt; (int)Version - 1;
+        set =&gt; Version = value + 1;
+    }
+
     public string? Name { get; set; }
 
-    public bool ShouldTakeSnapshot() =&gt; Version % 50 == 0;
-
-    public Customer TakeSnapshot()
-    {
-        EntityVersion = (int)Version - 1;
-        return this;
-    }
+    public bool ShouldTakeSnapshot() =&gt; Version % 50 == 0; // optional; the default never snapshots
 
     // Rename and ProcessEvent as above
 }</code></pre>
   <p>The snapshot is stored as JSON by <code>SnapshotDbContext</code>, so the entity needs a public parameterless constructor and settable state.</p>
-  <p><code>SaveAsync</code> takes snapshots for you: after the events are saved, if the entity implements <code>ISnapshotable&lt;TSnapshot&gt;</code> (<code>TSnapshot</code> being a reference type) and <code>ShouldTakeSnapshot()</code> returns true, it calls <code>TakeSnapshot()</code> and replaces the stored snapshot under the stream id. The snapshot is taken after <code>CommitEvents()</code>, so no uncommitted events are serialized with it. The events and the snapshot are separate writes: if the snapshot fails, the events are already stored and the next load just replays from the previous snapshot.</p>
+  <p><code>SaveAsync</code> takes snapshots for you: after the events are saved, if the entity implements <code>ISnapshot</code> and <code>ShouldTakeSnapshot()</code> returns true, it persists the entity itself, replacing the stored snapshot under the stream id. <code>EntityVersion</code> must equal the last applied event (<code>Version - 1</code>); otherwise <code>SaveAsync</code> throws <code>InvalidOperationException</code> after saving the events, because a wrong value would make loads skip or repeat an event. The snapshot is taken after <code>CommitEvents()</code>, so no uncommitted events are serialized with it. The events and the snapshot are separate writes: if the snapshot fails, the events are already stored and the next load just replays from the previous snapshot.</p>
 <pre><code>await store.SaveAsync(streamId, customer); // snapshots automatically when ShouldTakeSnapshot() is true
 
 // Later: latest snapshot + only the newer events
@@ -338,7 +337,7 @@ var loaded = await store.LoadAsync&lt;Customer&gt;("Customer-42");</code></pre>
 
   <h3 id="layout">Project layout<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
 <pre><code>src/
-  Abstractions/             IEvent, EventSourcedEntity, ISnapshot, ISnapshotable&lt;T&gt;
+  Abstractions/             IEvent, EventSourcedEntity, ISnapshot
   (root)                    EventStore, EventDbContext, SnapshotDbContext, Event, Snapshot, model configuration
   Serialization/            EventSerializer, SnapshotSerializer, EventTypesRegistry, PrivateConstructorConverter
   Extensions/               AddEventSourcing (DI registration)
