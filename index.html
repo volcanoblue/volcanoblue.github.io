@@ -124,7 +124,7 @@ footer a{color:var(--l1)}
     <tr><td><code>EventSourcedEntity</code></td><td><code>Abstractions</code></td><td>Base class for aggregates: tracks <code>Version</code>, uncommitted events, and applies events.</td></tr>
     <tr><td><code>IEvent</code></td><td><code>Abstractions</code></td><td>Contract for domain events. <code>EventId</code> is the sequence number in the stream and the entity version.</td></tr>
     <tr><td><code>ISnapshot</code></td><td><code>Abstractions</code></td><td>Contract for a materialized state at a given <code>EntityVersion</code>. An entity can implement it to be its own snapshot and decide when one is taken (<code>ShouldTakeSnapshot()</code>).</td></tr>
-    <tr><td><code>EventSourcingOptions</code></td><td>(root)</td><td>Instance-based configuration: event types, optional <code>TypeInfoResolver</code> and <code>TimeProvider</code>.</td></tr>
+    <tr><td><code>EventSourcingOptions</code></td><td>(root)</td><td>Instance-based configuration: event types and <code>TimeProvider</code>.</td></tr>
     <tr><td><code>EventStoreDbContext</code></td><td>(root)</td><td>The single EF Core context with the <code>Events</code> and <code>Snapshots</code> tables. It only stores rows (see <a href="#storage">Storage</a>).</td></tr>
     <tr><td><code>AddEventSourcing</code></td><td><code>Extensions</code></td><td>DI registration of <code>EventSourcingOptions</code> and <code>EventStore</code>.</td></tr>
   </table>
@@ -175,15 +175,15 @@ public sealed record NameChanged(long EventId, string Name) : IEvent;</code></pr
 services.AddDbContext&lt;EventStoreDbContext&gt;(o =&gt; o.UseSqlite("Data Source=events.db"));
 
 // Registers EventSourcingOptions (singleton) and EventStore (scoped).
-// Events are registered one by one: trim/AOT friendly, no scanning.
+// Events are registered one by one.
 services.AddEventSourcing(options =&gt; options.AddEvent&lt;NameChanged&gt;());
 
-// Or scan assemblies (the calling assembly when none is given). Uses reflection: [RequiresUnreferencedCode].
+// Or scan assemblies (the calling assembly when none is given).
 services.AddEventSourcing(typeof(NameChanged).Assembly);</code></pre>
   <p>Without DI:</p>
 <pre><code>var options = new EventSourcingOptions().AddEvent&lt;NameChanged&gt;();
 var store = new EventStore(db, options); // db is an EventStoreDbContext</code></pre>
-  <p><code>EventSourcingOptions</code> is instance-based (no global state) and is shared as a singleton. It is frozen once an <code>EventStore</code> uses it: further changes throw. <code>AddEvent&lt;TEvent&gt;()</code>, <code>AddEvent(Type)</code> and <code>AddEventsFrom(params Assembly[])</code> (scanning, <code>[RequiresUnreferencedCode]</code>, skips open generic types) register event types; <code>TypeInfoResolver</code> and <code>TimeProvider</code> (default <code>TimeProvider.System</code>) are settable properties. Event types are resolved by name when reading (see <a href="#serialization">Serialization</a>).</p>
+  <p><code>EventSourcingOptions</code> is instance-based (no global state) and is shared as a singleton. It is frozen once an <code>EventStore</code> uses it: further changes throw. <code>AddEvent&lt;TEvent&gt;()</code>, <code>AddEvent(Type)</code> and <code>AddEventsFrom(params Assembly[])</code> (scanning, skips open generic types) register event types; <code>TimeProvider</code> (default <code>TimeProvider.System</code>) is a settable property. Event types are resolved by name when reading (see <a href="#serialization">Serialization</a>).</p>
   <p><b>4. Save and load.</b> Inject <code>EventStore</code> and use the stream id of your aggregate:</p>
 <pre><code>public sealed class CustomerService(EventStore store)
 {
@@ -265,7 +265,7 @@ public sealed class Order : EventSourcedEntity, ISnapshot
     <li><b><code>EventId</code> is <code>NextEventId</code>.</b> This keeps ids sequential and lets the database reject two writers appending the same event id (optimistic concurrency).</li>
     <li><b>Immutable event records.</b> They serialize cleanly and cannot be altered after being raised.</li>
     <li><b><code>EntityVersion</code> is derived from <code>Version</code>.</b> It cannot get out of sync with the entity, and <code>SaveAsync</code> rejects a snapshot whose <code>EntityVersion</code> is not the last applied event.</li>
-    <li><b>Snapshots keep the encapsulation.</b> In the default reflection mode snapshots are written from the entity fields, so private setters, <code>readonly</code> fields and a private constructor all survive a restore. See <a href="#snapshots">Snapshots</a> and <a href="#serialization">Serialization</a> for the source-generated mode.</li>
+    <li><b>Snapshots keep the encapsulation.</b> Snapshots are written from the entity fields, so private setters, <code>readonly</code> fields and a private constructor all survive a restore. See <a href="#snapshots">Snapshots</a> and <a href="#serialization">Serialization</a>.</li>
     <li><b><code>ShouldTakeSnapshot()</code> is a cheap rule on the entity.</b> <code>SaveAsync</code> applies it for you after each save.</li>
     <li><b>Idempotent commands (<code>Ship</code>).</b> Repeating a command that already took effect raises no new event, so retries do not pollute the stream.</li>
   </ul>
@@ -279,7 +279,7 @@ public sealed class Order : EventSourcedEntity, ISnapshot
   <ul>
     <li>Construct it with <code>new EventStore(EventStoreDbContext db, EventSourcingOptions options)</code> or let DI do it.</li>
     <li>Saving an event whose type is not registered throws <code>InvalidOperationException</code> before anything is written.</li>
-    <li><code>T</code> is created through a cached, compiled factory (no reflection per call; without dynamic code it falls back to <code>ConstructorInfo.Invoke</code>), so non-public parameterless constructors are fine. A type without one throws <code>InvalidOperationException</code>. <code>LoadAsync&lt;T&gt;</code> is annotated so the constructor of <code>T</code> is preserved when trimming.</li>
+    <li><code>T</code> is created through a cached, compiled factory (no reflection per call), so non-public parameterless constructors are fine. A type without one throws <code>InvalidOperationException</code>.</li>
     <li>Two writers appending the same <code>EventId</code> to a stream conflict and <code>SaveAsync</code> throws <code>ConcurrencyException</code> (<code>StreamId</code>, <code>ExpectedVersion</code>, <code>ActualVersion</code>): reload the entity, reapply the command and save again. Other write failures surface as the original <code>DbUpdateException</code>. In a conflict neither the events nor the snapshot are written.</li>
     <li>The store is scoped, like the <code>DbContext</code> it wraps. Don't share one instance across threads.</li>
   </ul>
@@ -296,7 +296,7 @@ public sealed class Order : EventSourcedEntity, ISnapshot
 
     // Rename and ProcessEvent as above
 }</code></pre>
-  <p>The snapshot is stored as JSON in the <code>Snapshots</code> table. <code>EventSourcedEntity.Version</code> and <code>UncommittedEvents</code> are <code>[JsonIgnore]</code>; <code>Version</code> is restored from the row's <code>EntityVersion</code>. How the entity is serialized depends on the <a href="#serialization">serialization mode</a>.</p>
+  <p>The snapshot is stored as JSON in the <code>Snapshots</code> table. <code>EventSourcedEntity.Version</code> and <code>UncommittedEvents</code> are <code>[JsonIgnore]</code>; <code>Version</code> is restored from the row's <code>EntityVersion</code>. The entity is serialized by its fields (see <a href="#serialization">Serialization</a>).</p>
   <p><code>SaveAsync</code> takes snapshots for you: if the entity implements <code>ISnapshot</code> and <code>ShouldTakeSnapshot()</code> returns true, the events <b>and</b> the snapshot are written in one transaction: both are stored or neither. Everything is serialized before anything is written, so a snapshot that cannot be serialized (or an unregistered event type) saves nothing and leaves the uncommitted events in place. <code>EntityVersion</code> must equal the last applied event (<code>Version</code>); otherwise <code>SaveAsync</code> throws <code>InvalidOperationException</code> before saving anything, because a wrong value would make loads skip or repeat an event. One snapshot is kept per entity: a stored row with the same version is overwritten, others are removed.</p>
 <pre><code>await store.SaveAsync(streamId, customer); // snapshots automatically when ShouldTakeSnapshot() is true
 
@@ -305,49 +305,24 @@ var loaded = await store.LoadAsync&lt;Customer&gt;(streamId);</code></pre>
   <p>The snapshot id is the stream id. A snapshot that cannot be read back (<code>JsonException</code>) makes <code>LoadAsync</code> replay the whole stream.</p>
 
   <h3 id="serialization">Serialization<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
-  <p>Events and snapshots are serialized with <code>System.Text.Json</code>, in one of two modes.</p>
-  <p><b>Reflection mode (default, <code>TypeInfoResolver</code> is null).</b></p>
+  <p>Events and snapshots are serialized with <code>System.Text.Json</code> through reflection.</p>
   <ul>
     <li>Fields are included and property names are case-insensitive on read.</li>
     <li>Events may have private constructors (internal <code>PrivateConstructorConverter</code>), keeping domain types free of serialization concerns.</li>
-    <li>Entities are snapshotted by their instance fields (emitted accessors): no public setters are needed, the parameterless constructor can be private, and private and <code>readonly</code> fields are saved and restored. Auto-property backing fields are stored under the property name. Mark a property <code>[JsonIgnore]</code> (or a field <code>[NonSerialized]</code>) to leave its state out. Setter logic is not run on restore, only fields are assigned. Each field is written and read using its declared type, so a field typed as an interface or base class (other than collection interfaces such as <code>IReadOnlyList&lt;T&gt;</code>) cannot keep its concrete type: declare the concrete type.</li>
+    <li>Entities are snapshotted by their instance fields (emitted accessors): no public setters are needed, the parameterless constructor can be private, and private and <code>readonly</code> fields are saved and restored. Auto-property backing fields are stored under the property name. Computed properties (<code>Name =&gt; _name</code>) have no field, so they are never persisted and need no attribute. Mark an auto-property <code>[JsonIgnore]</code> (or a field <code>[NonSerialized]</code>) to leave its state out. Setter logic is not run on restore, only fields are assigned. Each field is written and read using its declared type, so a field typed as an interface or base class (other than collection interfaces such as <code>IReadOnlyList&lt;T&gt;</code>) cannot keep its concrete type: declare the concrete type.</li>
   </ul>
-  <p><b>Source-generated mode (<code>TypeInfoResolver</code> is set).</b> Events and snapshotted entities are serialized with the generated metadata, with no reflection over the entity. Without a resolver on a runtime that disallows reflection or dynamic code, snapshots throw an <code>InvalidOperationException</code> pointing at <code>TypeInfoResolver</code>.</p>
 <pre><code>public sealed class Customer : EventSourcedEntity, ISnapshot
 {
-    [JsonInclude] internal string? _name;
+    private string? _name;
 
-    [JsonIgnore] public string? Name =&gt; _name;
-    [JsonIgnore] public long EntityVersion =&gt; Version;
-
-    [JsonConstructor]
-    internal Customer() { }
+    public string? Name =&gt; _name;
+    public long EntityVersion =&gt; Version;
 
     // Rename as above
     public bool ShouldTakeSnapshot() =&gt; true;
 
     protected override void ProcessEvent(IEvent @event) { /* ... */ }
-}
-
-[JsonSourceGenerationOptions(IncludeFields = true)]
-[JsonSerializable(typeof(Customer))]
-[JsonSerializable(typeof(NameChanged))]
-internal sealed partial class AppJsonContext : JsonSerializerContext;
-
-services.AddEventSourcing(options =&gt;
-{
-    options.TypeInfoResolver = AppJsonContext.Default;
-    options.AddEvent&lt;NameChanged&gt;();
-});</code></pre>
-  <p>The generator cannot see private members, so:</p>
-  <ul>
-    <li>persisted state must be <code>internal</code> (or public) with <code>[JsonInclude]</code>;</li>
-    <li>the parameterless constructor must be <code>internal</code> or public with <code>[JsonConstructor]</code>;</li>
-    <li>the entity and its <code>JsonSerializerContext</code> must be in the same assembly;</li>
-    <li>the context needs <code>[JsonSourceGenerationOptions(IncludeFields = true)]</code> and a <code>[JsonSerializable]</code> for each event type and each snapshotted entity;</li>
-    <li>getter-only helper members should be <code>[JsonIgnore]</code>.</li>
-  </ul>
-  <p>A complete example is in <code>test/SourceGenTests.cs</code>.</p>
+}</code></pre>
   <p>Event names:</p>
   <ul>
     <li>Event types must be concrete classes/records implementing <code>IEvent</code> and must be registered in <code>EventSourcingOptions</code>; saving an unregistered type throws <code>InvalidOperationException</code> before anything is written, and reading an unknown stored name throws too.</li>
@@ -355,8 +330,7 @@ services.AddEventSourcing(options =&gt;
   </ul>
 
   <h3 id="aot">Native AOT and trimming<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
-  <p>The library project enables the trim and AOT analyzers and builds with 0 warnings. Registering events one by one (<code>AddEvent&lt;T&gt;()</code>) and supplying a <code>TypeInfoResolver</code> keep its own code (registry, serializers, entity factory) free of reflection over your types; this is verified by running the tests with <code>JsonSerializerIsReflectionEnabledByDefault=false</code>.</p>
-  <div class="note">Limitation: EF Core itself is not fully trimming/Native-AOT compatible. Its <code>DbContext</code> constructor is marked <code>RequiresUnreferencedCode</code>/<code>RequiresDynamicCode</code>, and the <code>EventStoreDbContext</code> constructor passes that on, so a full Native AOT publish of an application also depends on EF Core's own support. The package is trim/AOT analyzer clean, with EF Core being the remaining limitation.</div>
+  <p>The library is reflection based by design (entity fields, private constructors, emitted accessors) and is not compatible with trimming or Native AOT.</p>
 
   <h3 id="storage">Storage<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
   <p><code>EventStoreDbContext</code> has public <code>DbSet&lt;Event&gt; Events</code> and <code>DbSet&lt;Snapshot&gt; Snapshots</code> and no read or append methods: serialization and persistence are done by <code>EventStore</code>.</p>
