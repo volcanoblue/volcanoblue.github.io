@@ -105,33 +105,37 @@ footer a{color:var(--l1)}
 <section id="docs" class="docs">
   <a id="toc"></a>
   <h2>Documentation</h2>
-  <p class="sub">How to use Volcano Blue in your application. Targets .NET 10 and Entity Framework Core.</p>
-  <div class="toc"><a href="#install">Installation</a><a href="#concepts">Core concepts</a><a href="#versioning">Versioning</a><a href="#quickstart">Quick start</a><a href="#api">EventStore API</a><a href="#snapshots">Snapshots</a><a href="#legacy">Legacy database</a><a href="#serialization">Serialization</a><a href="#setup">Database setup</a></div>
+  <p class="sub">A .NET library with abstractions and an Entity Framework Core event store to speed up Event Sourcing development. Model your aggregates, then load and save them with a single type: <code>EventStore</code>.</p>
+  <ul>
+    <li><b>Target framework:</b> .NET 10</li>
+    <li><b>Dependencies:</b> <code>Microsoft.EntityFrameworkCore</code>, <code>Moonad</code> (<code>Option&lt;T&gt;</code>)</li>
+    <li><b>License:</b> Unlicense</li>
+  </ul>
+  <div class="toc"><a href="#install">Installation</a><a href="#concepts">Concepts</a><a href="#versioning">Versioning</a><a href="#quickstart">Quick start</a><a href="#api">Store API</a><a href="#snapshots">Snapshots</a><a href="#serialization">Serialization</a><a href="#lowlevel">Low-level stores</a><a href="#setup">Database setup</a><a href="#legacy">Legacy database</a><a href="#performance">Performance tips</a><a href="#layout">Project layout</a><a href="#build">Build and test</a></div>
 
   <h3 id="install">Installation</h3>
-  <p>Add the package to your project, plus an EF Core provider for your database (SQL Server, SQLite, PostgreSQL, ...).</p>
   <pre><code>dotnet add package VolcanoBlue.EventSourcing</code></pre>
+  <p>You also need an EF Core provider for your database (SQL Server, SQLite, PostgreSQL, ...).</p>
 
-  <h3 id="concepts">Core concepts<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
-  <p>An <b>event</b> is an immutable fact that already happened, named in the past tense. A <b>stream</b> is the ordered list of events of one entity. The current state is never stored directly: it is rebuilt by replaying the events in order.</p>
+  <h3 id="concepts">Concepts<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
   <table>
-    <tr><th>Type</th><th>Purpose</th></tr>
-    <tr><td><code>IEvent</code></td><td>Contract for domain events. <code>EventId</code> is the sequence number in the stream and the entity version.</td></tr>
-    <tr><td><code>EventSourcedEntity</code></td><td>Base class for aggregates: tracks <code>Version</code> and uncommitted events, and applies events.</td></tr>
-    <tr><td><code>ISnapshot</code></td><td>Materialized state at a given <code>EntityVersion</code>.</td></tr>
-    <tr><td><code>ISnapshotable&lt;T&gt;</code></td><td>Optional: lets an entity decide when and how to create a snapshot.</td></tr>
-    <tr><td><code>EventDbContext</code></td><td>Append-only event store (read streams, append, save).</td></tr>
-    <tr><td><code>SnapshotDbContext</code></td><td>Snapshot store (get by id, upsert).</td></tr>
-    <tr><td><code>AddEventSourcing()</code></td><td><code>IServiceCollection</code> extension that configures the library (event type registration).</td></tr>
+    <tr><th>Type</th><th>Namespace</th><th>Purpose</th></tr>
+    <tr><td><code>EventStore</code></td><td><code>EventStore</code></td><td><b>The main entry point.</b> <code>LoadAsync</code>, <code>LoadFromSnapshotAsync</code> and <code>SaveAsync</code> for your aggregates.</td></tr>
+    <tr><td><code>EventSourcedEntity</code></td><td><code>Abstractions</code></td><td>Base class for aggregates: tracks <code>Version</code>, uncommitted events, and applies events.</td></tr>
+    <tr><td><code>IEvent</code></td><td><code>Abstractions</code></td><td>Contract for domain events. <code>EventId</code> is the sequence number in the stream and the entity version.</td></tr>
+    <tr><td><code>ISnapshot</code></td><td><code>Abstractions</code></td><td>Contract for a materialized state at a given <code>EntityVersion</code>.</td></tr>
+    <tr><td><code>ISnapshotable&lt;T&gt;</code></td><td><code>Abstractions</code></td><td>Optional contract for entities that decide when and how to create a snapshot.</td></tr>
+    <tr><td><code>EventTypesRegistry</code></td><td><code>EventStore.Serialization</code></td><td>Maps stored type names to CLR event types for deserialization.</td></tr>
+    <tr><td><code>EventDbContext</code> / <code>SnapshotDbContext</code></td><td><code>EventStore</code></td><td>The EF Core stores behind the store. You rarely need them directly (see <a href="#lowlevel">Low-level stores</a>).</td></tr>
   </table>
 
   <h3 id="versioning">Versioning<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
   <ul>
     <li>A new entity starts at <code>Version = 1</code>.</li>
-    <li><code>RaiseEvent(event)</code> increments <code>Version</code>, records the event as uncommitted and applies it through <code>ProcessEvent</code>.</li>
+    <li><code>RaiseEvent(event)</code> increments <code>Version</code>, records the event as uncommitted and applies it via <code>ProcessEvent</code>.</li>
     <li>Create events with the current <code>Version</code> as <code>EventId</code> <em>before</em> calling <code>RaiseEvent</code> (the first event has <code>EventId = 1</code>).</li>
-    <li><code>Rehydrate(stream)</code> replays stored events and then increments <code>Version</code>, so the next event gets the next id. Do not call it with an empty stream.</li>
-    <li><code>CommitEvents()</code> clears the uncommitted list after a successful save.</li>
+    <li><code>Rehydrate(ImmutableArray&lt;IEvent&gt; stream)</code> replays stored events (setting <code>Version</code> to each <code>EventId</code>) and then increments <code>Version</code>, so the next event gets the next id. The store calls it for you.</li>
+    <li><code>CommitEvents()</code> clears the uncommitted list; <code>EventStore.SaveAsync</code> calls it after a successful save.</li>
   </ul>
 
   <h3 id="quickstart">Quick start<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
@@ -139,21 +143,10 @@ footer a{color:var(--l1)}
 <pre><code>using VolcanoBlue.EventSourcing.Abstractions;
 
 public sealed record NameChanged(long EventId, string Name) : IEvent;</code></pre>
-  <p><b>2. Define an entity.</b> Implement <code>ProcessEvent</code> to apply each event to the state.</p>
+  <p><b>2. Define an entity.</b> Entities loaded by the store need a parameterless constructor (it can be private or protected).</p>
 <pre><code>public sealed class Customer : EventSourcedEntity
 {
-    public string StreamId { get; }
     public string? Name { get; private set; }
-
-    public Customer(string id) =&gt; StreamId = $"Customer-{id}";
-
-    public static Customer Rehydrate(string id, ImmutableArray&lt;IEvent&gt; stream)
-    {
-        var customer = new Customer(id);
-        if (!stream.IsEmpty)
-            customer.Rehydrate(stream);
-        return customer;
-    }
 
     public void Rename(string name)
     {
@@ -175,79 +168,109 @@ public sealed record NameChanged(long EventId, string Name) : IEvent;</code></pr
         }
     }
 }</code></pre>
-  <p><b>3. Configure the library and register the stores.</b> Call the <code>AddEventSourcing</code> extension method once at startup.</p>
+  <p><b>3. Register everything.</b></p>
 <pre><code>using VolcanoBlue.EventSourcing.Extensions;
 
-services.AddEventSourcing();
-
 services.AddDbContext&lt;EventDbContext&gt;(o =&gt; o.UseSqlite("Data Source=events.db"));
-services.AddDbContext&lt;SnapshotDbContext&gt;(o =&gt; o.UseSqlite("Data Source=events.db"));</code></pre>
-  <p><b>4. Save and load.</b></p>
-<pre><code>// Save
-var customer = new Customer("42");
-customer.Rename("Ada");
+services.AddDbContext&lt;SnapshotDbContext&gt;(o =&gt; o.UseSqlite("Data Source=events.db"));
 
-await eventStore.AppendToStreamAsync(customer.StreamId, customer.UncommittedEvents);
-await eventStore.SaveStreamAsync(); // throws DbUpdateException on conflicts
-customer.CommitEvents();
+// Registers EventStore (scoped) and the event types of the given assemblies.
+// Without arguments it scans the calling assembly.
+services.AddEventSourcing(typeof(NameChanged).Assembly);</code></pre>
+  <p>Event types are resolved by full name when reading. <code>AddEventSourcing</code> calls <code>EventTypesRegistry.Initialize</code>; you can also call it yourself at startup. Each assembly is scanned once, and later calls with new assemblies add their events.</p>
+  <p><b>4. Save and load.</b> Inject <code>EventStore</code> and use the stream id of your aggregate:</p>
+<pre><code>public sealed class CustomerService(EventStore store)
+{
+    public async Task RenameAsync(string id, string name)
+    {
+        var streamId = $"Customer-{id}";
 
-// Load
-var stream = await eventStore.ReadStreamAsync("Customer-42");
-var loaded = Customer.Rehydrate("42", stream);</code></pre>
+        var customer = await store.LoadAsync&lt;Customer&gt;(streamId);
+        var entity = customer ? customer.Get() : new Customer();
 
-  <h3 id="api">EventStore API<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
-  <p><code>EventDbContext</code> methods:</p>
+        entity.Rename(name);
+        await store.SaveAsync(streamId, entity); // throws DbUpdateException on conflicts
+    }
+}</code></pre>
+
+  <h3 id="api">Store API (EventStore)<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
   <table>
     <tr><th>Method</th><th>Description</th></tr>
-    <tr><td><code>ReadStreamAsync(streamId, ct)</code></td><td>All events of a stream ordered by id, as <code>ImmutableArray&lt;IEvent&gt;</code>. Empty if the stream does not exist.</td></tr>
-    <tr><td><code>ReadStreamFromEventIdAsync(streamId, eventId, ct)</code></td><td>Events with <code>Id &gt; eventId</code>; useful after loading a snapshot.</td></tr>
-    <tr><td><code>AppendToStreamAsync(streamId, events, ct)</code></td><td>Serializes and stages events. Nothing is persisted until saved.</td></tr>
-    <tr><td><code>SaveStreamAsync(ct)</code></td><td>Persists staged events and returns the number of rows written. Throws <code>DbUpdateException</code> on failures such as a duplicate <code>EventId</code>.</td></tr>
+    <tr><td><code>LoadAsync&lt;T&gt;(streamId, ct)</code></td><td>Reads the whole stream, creates a <code>T</code> and rehydrates it. Returns <code>Option&lt;T&gt;</code>; <code>None</code> when the stream is empty.</td></tr>
+    <tr><td><code>LoadFromSnapshotAsync&lt;T&gt;(streamId, ct)</code></td><td>Loads the latest snapshot and replays only the events after it. Without a snapshot it replays the whole stream. <code>None</code> when neither exists.</td></tr>
+    <tr><td><code>SaveAsync&lt;T&gt;(streamId, entity, ct)</code></td><td>Appends the uncommitted events, saves them in one round trip and calls <code>CommitEvents()</code>. Does nothing when there are no uncommitted events. If the entity implements <code>ISnapshotable&lt;&gt;</code> and <code>ShouldTakeSnapshot()</code> returns true, it then takes a snapshot and persists it (see <a href="#snapshots">Snapshots</a>).</td></tr>
   </table>
   <ul>
-    <li>The <code>Event</code> table stores <code>Id</code> (the event's <code>EventId</code>), <code>StreamId</code>, <code>OccurredAt</code> (UTC), <code>EventType</code> (full type name) and <code>Data</code> (JSON).</li>
-    <li>The primary key is <code>(Id, StreamId)</code>, so two writers appending the same <code>EventId</code> to a stream conflict and the save fails (optimistic concurrency).</li>
-    <li>Reads use <code>AsNoTracking</code> and return immutable arrays.</li>
+    <li><code>T</code> is created through a cached, compiled factory (no reflection per call), so non-public parameterless constructors are fine. A type without one throws <code>InvalidOperationException</code>.</li>
+    <li>Two writers appending the same <code>EventId</code> to a stream conflict and <code>SaveAsync</code> fails with <code>DbUpdateException</code> (optimistic concurrency).</li>
+    <li>The store is scoped, like the <code>DbContext</code>s it wraps. Don't share one instance across threads.</li>
   </ul>
 
   <h3 id="snapshots">Snapshots<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
-  <p>Snapshots avoid replaying long streams. A snapshot is any type implementing <code>ISnapshot</code>, where <code>EntityVersion</code> is the last event applied.</p>
-<pre><code>public sealed record CustomerSnapshot(int EntityVersion, string? Name) : ISnapshot;</code></pre>
+  <p>Snapshots avoid replaying long streams. With <code>LoadFromSnapshotAsync&lt;T&gt;</code>, the entity is its own snapshot: <code>T : EventSourcedEntity, ISnapshot</code>, where <code>EntityVersion</code> is the last event applied.</p>
+<pre><code>public sealed class Customer : EventSourcedEntity, ISnapshot, ISnapshotable&lt;Customer&gt;
+{
+    public int EntityVersion { get; set; }
+    public string? Name { get; set; }
+
+    public bool ShouldTakeSnapshot() =&gt; Version % 50 == 0;
+
+    public Customer TakeSnapshot()
+    {
+        EntityVersion = (int)Version - 1;
+        return this;
+    }
+
+    // Rename and ProcessEvent as above
+}</code></pre>
+  <p>The snapshot is stored as JSON by <code>SnapshotDbContext</code>, so the entity needs a public parameterless constructor and settable state.</p>
+  <p><code>SaveAsync</code> takes snapshots for you: after the events are saved, if the entity implements <code>ISnapshotable&lt;TSnapshot&gt;</code> (<code>TSnapshot</code> being a reference type) and <code>ShouldTakeSnapshot()</code> returns true, it calls <code>TakeSnapshot()</code> and replaces the stored snapshot under the stream id. The snapshot is taken after <code>CommitEvents()</code>, so no uncommitted events are serialized with it. The events and the snapshot are separate writes: if the snapshot fails, the events are already stored and the next load just replays from the previous snapshot.</p>
+<pre><code>await store.SaveAsync(streamId, customer); // snapshots automatically when ShouldTakeSnapshot() is true
+
+// Later: latest snapshot + only the newer events
+var loaded = await store.LoadFromSnapshotAsync&lt;Customer&gt;(streamId);</code></pre>
+  <p>The snapshot id is the stream id. Only the latest snapshot is kept. You can still write snapshots manually with <code>SnapshotDbContext</code> (see <a href="#lowlevel">Low-level stores</a>).</p>
+
+  <h3 id="serialization">Serialization<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
+  <ul>
+    <li>Events are serialized with <code>System.Text.Json</code>; fields are included and property names are case-insensitive on read.</li>
+    <li>Types with private constructors can be deserialized (internal <code>PrivateConstructorConverter</code>), keeping domain types free of serialization concerns.</li>
+    <li>Event types must be concrete classes/records implementing <code>IEvent</code>, and their assembly must be registered (<code>AddEventSourcing</code> or <code>EventTypesRegistry.Initialize</code>); otherwise reading throws <code>InvalidOperationException</code> ("Event type ... not found").</li>
+    <li>The full type name is stored, so renaming or moving an event type breaks reading existing events.</li>
+  </ul>
+
+  <h3 id="lowlevel">Low-level stores<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
+  <p><code>EventStore</code> is built on two EF Core contexts, available when you need direct control.</p>
+  <p><code>EventDbContext</code>:</p>
   <table>
     <tr><th>Method</th><th>Description</th></tr>
-    <tr><td><code>ByIdAsync&lt;T&gt;(id, ct)</code></td><td>Returns <code>Option&lt;T&gt;</code>; <code>None</code> if no snapshot exists.</td></tr>
-    <tr><td><code>UpsertAsync(entityId, snapshot, ct)</code></td><td>Replaces the stored snapshot of the entity. Call <code>SaveChangesAsync()</code> to persist.</td></tr>
+    <tr><td><code>ReadStreamAsync(streamId, ct)</code></td><td>All events of a stream ordered by id, as <code>ImmutableArray&lt;IEvent&gt;</code>. Empty if the stream doesn't exist.</td></tr>
+    <tr><td><code>ReadStreamFromEventIdAsync(streamId, eventId, ct)</code></td><td>Events with <code>Id &gt; eventId</code>.</td></tr>
+    <tr><td><code>AppendToStreamAsync(streamId, events, ct)</code></td><td>Serializes and stages events. Nothing is persisted until saved.</td></tr>
+    <tr><td><code>SaveStreamAsync(ct)</code></td><td>Persists staged events; returns the number of rows written; throws <code>DbUpdateException</code> on failures such as a duplicate <code>EventId</code>.</td></tr>
   </table>
-  <p>Typical rebuild flow: load the snapshot, then replay only the events after its version.</p>
-<pre><code>var snapshot = await snapshots.ByIdAsync&lt;CustomerSnapshot&gt;("Customer-42");
-var state = snapshot ? snapshot.Get() : new CustomerSnapshot(0, null);
+  <p><code>SnapshotDbContext</code>:</p>
+  <table>
+    <tr><th>Method</th><th>Description</th></tr>
+    <tr><td><code>ByIdAsync&lt;T&gt;(entityId, ct)</code></td><td><code>Option&lt;T&gt;</code> with the highest stored version; <code>None</code> if no snapshot exists.</td></tr>
+    <tr><td><code>UpsertAsync(entityId, snapshot, ct)</code></td><td>Replaces the stored snapshot for the entity. Call <code>SaveChangesAsync()</code> to persist.</td></tr>
+  </table>
+  <p>Storage details:</p>
+  <ul>
+    <li>Events are stored in the <code>Events</code> table (<code>Event</code> entity): <code>Id</code> (the event's <code>EventId</code>), <code>StreamId</code>, <code>OccurredAt</code> (UTC), <code>EventType</code> (full type name) and <code>Data</code> (JSON).</li>
+    <li>The primary key is <code>(Id, StreamId)</code>; there is also an index on <code>(StreamId, Id)</code> for reads.</li>
+    <li>Snapshots are stored in the <code>Snapshots</code> table (<code>Snapshot</code> entity): <code>EntityId</code>, <code>EntityVersion</code>, <code>Created</code> and <code>Data</code> (JSON), with primary key <code>(EntityId, EntityVersion)</code>.</li>
+    <li>Reads use <code>AsNoTracking</code> and return immutable arrays.</li>
+  </ul>
 
-var tail = await events.ReadStreamFromEventIdAsync("Customer-42", state.EntityVersion);
-// apply tail on top of state</code></pre>
-  <p>Implement <code>ISnapshotable&lt;TSnapshot&gt;</code> (<code>ShouldTakeSnapshot()</code> / <code>TakeSnapshot()</code>) on an entity to encapsulate when and how snapshots are taken. The interface lives in <code>VolcanoBlue.EventSourcing.Abstractions</code>.</p>
-<pre><code>using VolcanoBlue.EventSourcing.Abstractions;
-
-public sealed class Customer : Entity, ISnapshotable&lt;CustomerSnapshot&gt;
-{
-    private const int SnapshotInterval = 50;
-
-    // ... StreamId, Name, Rename, ProcessEvent as in the quick start ...
-
-    // Take a snapshot every 50 events.
-    public bool ShouldTakeSnapshot() =&gt; Version &gt; 0 &amp;&amp; Version % SnapshotInterval == 0;
-
-    public CustomerSnapshot TakeSnapshot() =&gt; new(Version, Name);
-}
-
-if (customer.ShouldTakeSnapshot())
-{
-    await snapshots.UpsertAsync(customer.StreamId, customer.TakeSnapshot());
-    await snapshots.SaveChangesAsync();
-}</code></pre>
+  <h3 id="setup">Database setup<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
+  <p>The library ships no migrations; create the schema yourself. For tests, see the SQLite in-memory setup in <code>test/SqliteFixture.cs</code>:</p>
+<pre><code>eventStore.Database.EnsureCreated();
+snapshotStore.GetService&lt;IRelationalDatabaseCreator&gt;().CreateTables(); // when sharing one database</code></pre>
 
   <h3 id="legacy">Mapping a legacy database<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
-  <p>If the tables already exist with their own names (database-first), keep the schema as is and map the public <code>Event</code> and <code>Snapshot</code> entities onto it. Each context accepts an optional callback resolved from DI: <code>EventModelConfiguration</code> for <code>EventDbContext</code> and <code>SnapshotModelConfiguration</code> for <code>SnapshotDbContext</code>. The callback runs after the default configuration, so your mapping wins.</p>
-  <p><b>1. The existing tables.</b> All columns are required, and the primary keys must be <code>(Id, StreamId)</code> and <code>(EntityId, EntityVersion)</code>.</p>
+  <p>If the events table already exists with its own names (database-first), keep the schema as is and map the library's <code>Event</code> entity onto it. <code>Event</code> and <code>Snapshot</code> are public, and each context accepts an optional callback resolved from DI: <code>EventModelConfiguration</code> for <code>EventDbContext</code> and <code>SnapshotModelConfiguration</code> for <code>SnapshotDbContext</code>. They are separate delegate types so each context only receives its own mapping. The callback runs after the default configuration, so your mapping wins. <code>EventStore</code> works on top of the mapped contexts unchanged.</p>
+  <p><b>1. The existing table (<code>DatabaseFirst.db</code>).</b></p>
 <pre><code>CREATE TABLE event_log (
     event_id    INTEGER NOT NULL,   -- Event.Id (the event's EventId)
     stream_name TEXT    NOT NULL,   -- Event.StreamId
@@ -256,6 +279,8 @@ if (customer.ShouldTakeSnapshot())
     payload     TEXT    NOT NULL,   -- Event.Data (JSON)
     PRIMARY KEY (event_id, stream_name)
 );</code></pre>
+  <p>All five columns are required, and the primary key must be <code>(Id, StreamId)</code> to keep the optimistic concurrency behavior.</p>
+  <p>The snapshot table (only needed if you use snapshots):</p>
 <pre><code>CREATE TABLE snapshot_log (
     entity_name    TEXT    NOT NULL,   -- Snapshot.EntityId
     entity_version INTEGER NOT NULL,   -- Snapshot.EntityVersion
@@ -265,10 +290,8 @@ if (customer.ShouldTakeSnapshot())
 );</code></pre>
   <p><b>2. Map the columns when registering the contexts.</b></p>
 <pre><code>using Microsoft.EntityFrameworkCore;
-using VolcanoBlue.EventSourcing.EventStore;
+using VolcanoBlue.EventSourcing;
 using VolcanoBlue.EventSourcing.Extensions;
-
-services.AddEventSourcing();
 
 // The mapping callbacks are picked up by the contexts' constructors.
 services.AddSingleton&lt;EventModelConfiguration&gt;(modelBuilder =&gt;
@@ -295,29 +318,36 @@ services.AddSingleton&lt;SnapshotModelConfiguration&gt;(modelBuilder =&gt;
 services.AddDbContext&lt;EventDbContext&gt;(options =&gt;
     options.UseSqlite("Data Source=DatabaseFirst.db"));
 services.AddDbContext&lt;SnapshotDbContext&gt;(options =&gt;
-    options.UseSqlite("Data Source=DatabaseFirst.db"));</code></pre>
+    options.UseSqlite("Data Source=DatabaseFirst.db"));
+
+services.AddEventSourcing(typeof(NameChanged).Assembly);</code></pre>
   <p><b>3. Use it as usual.</b></p>
-<pre><code>await eventStore.AppendToStreamAsync("Customer-42", customer.UncommittedEvents);
-await eventStore.SaveStreamAsync();
+<pre><code>await store.SaveAsync("Customer-42", customer);
+var loaded = await store.LoadAsync&lt;Customer&gt;("Customer-42");</code></pre>
+  <div class="note">Don't call <code>EnsureCreated()</code> or run migrations against a legacy database; the schema is owned by the database. Both mappings are optional and independent: register only the callbacks you need. Existing rows must hold the full type name of the event in the type column and JSON in the data column, as written by this library. EF caches the model per context type, so use a single mapping per application. A working example is in <code>test/DatabaseFirstTests.cs</code>.</div>
 
-var stream = await eventStore.ReadStreamAsync("Customer-42");
-
-await snapshotStore.UpsertAsync("Customer-42", new CustomerSnapshot(2, "Ada"));
-await snapshotStore.SaveChangesAsync();</code></pre>
-  <div class="note">Do not call <code>EnsureCreated()</code> or run migrations against a legacy database: the schema is owned by the database. EF caches the model per context type, so use a single mapping per application. A working example is in <code>test/DatabaseFirstTests.cs</code>.</div>
-
-  <h3 id="serialization">Serialization<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
+  <h3 id="performance">Performance tips<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
+  <p>Built in: entity factories are compiled once per type, reads use <code>AsNoTracking</code> and deserialize while streaming, <code>SaveAsync</code> persists all events of an aggregate in one round trip, there is a <code>(StreamId, Id)</code> index, and change detection is disabled on <code>EventDbContext</code>.</p>
+  <p>Recommended in your application:</p>
   <ul>
-    <li>Events and snapshots are serialized with <code>System.Text.Json</code>; fields are included and property names are case-insensitive on read.</li>
-    <li>Types with private constructors can be deserialized, keeping domain types free of serialization concerns.</li>
-    <li>Event types must be concrete classes or records implementing <code>IEvent</code>, and the library must be configured with <code>services.AddEventSourcing()</code>; otherwise reading throws <code>InvalidOperationException</code>.</li>
-    <li>The full type name is stored, so renaming or moving an event type breaks reading existing events.</li>
+    <li><b>Use snapshots</b> for long streams: <code>LoadFromSnapshotAsync</code> reads the latest snapshot and only the newer events. Let <code>ShouldTakeSnapshot()</code> return true every N events and <code>SaveAsync</code> handles the rest.</li>
+    <li><b>Legacy schemas:</b> create an index on <code>(stream column, id column)</code> yourself, as the library doesn't create it for you.</li>
+    <li><b>Database tuning:</b> keep connection pooling on, use WAL for SQLite, and consider native <code>datetime</code>/<code>jsonb</code> columns when you own the schema.</li>
+    <li><b>Caching:</b> keep hot aggregates in a short-lived cache and apply only events newer than the cached <code>Version</code>.</li>
   </ul>
 
-  <h3 id="setup">Database setup<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
-  <p>The library ships no migrations; create the schema yourself. For tests, an in-memory SQLite database works well (see <code>test/SqliteFixture.cs</code>).</p>
-<pre><code>eventStore.Database.EnsureCreated();
-snapshotStore.GetService&lt;IRelationalDatabaseCreator&gt;().CreateTables(); // when sharing one database</code></pre>
+  <h3 id="layout">Project layout<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
+<pre><code>src/
+  Abstractions/             IEvent, EventSourcedEntity, ISnapshot, ISnapshotable&lt;T&gt;
+  (root)                    EventStore, EventDbContext, SnapshotDbContext, Event, Snapshot, model configuration
+  Serialization/            EventSerializer, SnapshotSerializer, EventTypesRegistry, PrivateConstructorConverter
+  Extensions/               AddEventSourcing (DI registration)
+test/                       xUnit tests using in-memory SQLite</code></pre>
+
+  <h3 id="build">Build and test<a class="top" href="#toc" title="Back to top" aria-label="Back to top">↑ Top</a></h3>
+<pre><code>dotnet build
+dotnet test</code></pre>
+  <p>Released under the <a href="https://github.com/volcanoblue/event-sourcing/blob/main/LICENSE">Unlicense</a>.</p>
 </section>
 </div>
 <footer><div class="w">Volcano Blue · Event Sourcing for .NET · <a href="https://www.nuget.org/packages/VolcanoBlue.EventSourcing/">NuGet</a> · <a href="https://github.com/volcanoblue/event-sourcing">GitHub</a></div></footer>
