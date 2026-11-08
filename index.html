@@ -134,7 +134,7 @@ footer a{color:var(--l1)}
     <li><code>Version</code> is the id of the last applied event. A new entity starts at <code>Version = 0</code>.</li>
     <li><code>RaiseEvent(event)</code> increments <code>Version</code>, records the event as uncommitted and applies it via <code>ProcessEvent</code>.</li>
     <li>Create events with <code>NextEventId</code> (<code>Version + 1</code>) as <code>EventId</code> <em>before</em> calling <code>RaiseEvent</code> (the first event has <code>EventId = 1</code>). <code>RaiseEvent</code> does not validate the id; <code>SaveAsync</code> does, throwing <code>InvalidOperationException</code> (nothing saved) when the pending events are not consecutive. A competing writer is reported as <code>ConcurrencyException</code>.</li>
-    <li><code>Rehydrate(ImmutableArray&lt;IEvent&gt; stream)</code> replays stored events, setting <code>Version</code> to each <code>EventId</code>, so <code>Version</code> ends at the last event. The store calls it for you.</li>
+    <li><code>Rehydrate(ImmutableArray&lt;IEvent&gt; stream)</code> replays stored events, setting <code>Version</code> to each <code>EventId</code>, so <code>Version</code> ends at the last event. Use it to rebuild an entity from events you already hold (for example in unit tests); <code>EventStore.LoadAsync</code> replays the stream itself.</li>
     <li><code>CommitEvents()</code> clears the uncommitted list; <code>EventStore.SaveAsync</code> calls it after a successful save.</li>
   </ul>
 
