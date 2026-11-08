@@ -175,11 +175,15 @@ public sealed record NameChanged(long EventId, string Name) : IEvent;</code></pr
 services.AddDbContext&lt;EventStoreDbContext&gt;(o =&gt; o.UseSqlite("Data Source=events.db"));
 
 // Registers EventSourcingOptions (singleton) and EventStore (scoped).
-// Events are registered one by one.
-services.AddEventSourcing(options =&gt; options.AddEvent&lt;NameChanged&gt;());
+// Simplest: scans the calling assembly for every IEvent, so no manual registration is needed.
+services.AddEventSourcing();
 
-// Or scan assemblies (the calling assembly when none is given).
-services.AddEventSourcing(typeof(NameChanged).Assembly);</code></pre>
+// Events in other assemblies:
+services.AddEventSourcing(typeof(NameChanged).Assembly);
+
+// Or register events one by one:
+services.AddEventSourcing(options =&gt; options.AddEvent&lt;NameChanged&gt;());</code></pre>
+  <p>Stored events identify their type by name, so every event type must be known when reading. Registration (scanning or <code>AddEvent</code>) happens at startup and is validated then: duplicate names fail on first use of the options, not when an entity happens to be loaded. The library does not guess the events of an entity, since events may live in another assembly.</p>
   <p>Without DI:</p>
 <pre><code>var options = new EventSourcingOptions().AddEvent&lt;NameChanged&gt;();
 var store = new EventStore(db, options); // db is an EventStoreDbContext</code></pre>
